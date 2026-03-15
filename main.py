@@ -582,3 +582,76 @@ def cmd_reading_add(store: IceCoolStore, zone_id: str, temp_celsius: float, sens
     scaled = celsius_to_scaled(temp_celsius)
     if not sensor_root:
         sensor_root = hashlib.sha256(f"{zone_id}{idx}{time.time()}".encode()).hexdigest()
+    r = SetpointReadingRecord(
+        zone_id=zone_id,
+        reading_index=idx,
+        temp_scaled=scaled,
+        sensor_root=sensor_root,
+        recorded_at=time.time(),
+    )
+    store.add_reading(r)
+    print(f"Reading {idx} added for zone {zone_id}: {temp_celsius}°C (scaled={scaled})")
+
+
+def cmd_band_add(store: IceCoolStore, zone_id: str, low_celsius: float, high_celsius: float) -> None:
+    low_s = celsius_to_scaled(low_celsius)
+    high_s = celsius_to_scaled(high_celsius)
+    bands = store.get_bands(zone_id)
+    idx = len(bands)
+    b = HysteresisBandRecord(
+        zone_id=zone_id,
+        band_index=idx,
+        low_threshold_scaled=low_s,
+        high_threshold_scaled=high_s,
+    )
+    store.add_band(b)
+    print(f"Hysteresis band {idx} added for {zone_id}: [{low_celsius}, {high_celsius}]°C")
+
+
+def cmd_schedule_add(store: IceCoolStore, zone_id: str, start_block: int, end_block: int, setpoint_decicelsius: int) -> None:
+    w = ScheduleWindowRecord(
+        zone_id=zone_id,
+        start_block=start_block,
+        end_block=end_block,
+        setpoint_decicelsius=setpoint_decicelsius,
+    )
+    store.add_schedule_window(w)
+    print(f"Schedule window added for {zone_id}: blocks [{start_block}, {end_block}] setpoint={setpoint_decicelsius}")
+
+
+def cmd_link(store: IceCoolStore, zone_a: str, zone_b: str) -> None:
+    store.link_zones(zone_a, zone_b)
+    print(f"Linked {zone_a} <-> {zone_b}")
+
+
+# -----------------------------------------------------------------------------
+# SIMULATE / SUGGEST
+# -----------------------------------------------------------------------------
+
+
+def suggest_mode(reading_celsius: float, setpoint_celsius: float, low_c: float, high_c: float) -> str:
+    if reading_celsius > high_c:
+        return "COOL"
+    if reading_celsius < low_c:
+        return "HEAT"
+    return "HOLD"
+
+
+def simulate_effective_setpoint(store: IceCoolStore, zone_id: str, block_num: int) -> int:
+    return store.effective_setpoint_at_block(zone_id, block_num)
+
+
+# -----------------------------------------------------------------------------
+# MAIN CLI
+# -----------------------------------------------------------------------------
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog=ICECOOL_APP_NAME, description="Household climatic control companion for FridgAI")
+    parser.add_argument("--version", action="store_true", help="Show version")
+    parser.add_argument("--config-dir", type=str, default="", help="Config directory (default: ~/.icecool)")
+    sub = parser.add_subparsers(dest="command", help="Commands")
+
+    # zone add
+    p_add = sub.add_parser("zone-add", help="Add a zone")
+    p_add.add_argument("zone_id", type=str, help="Zone ID")

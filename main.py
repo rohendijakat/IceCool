@@ -655,3 +655,76 @@ def main() -> int:
     # zone add
     p_add = sub.add_parser("zone-add", help="Add a zone")
     p_add.add_argument("zone_id", type=str, help="Zone ID")
+    p_add.add_argument("--setpoint", type=float, default=22.0, help="Setpoint in Celsius")
+    p_add.add_argument("--cooling", action="store_true", help="Prefer cooling")
+    p_add.add_argument("--label", type=str, default="", help="Optional label")
+
+    # zone list
+    sub.add_parser("zone-list", help="List zones")
+
+    # zone show
+    p_show = sub.add_parser("zone-show", help="Show zone details")
+    p_show.add_argument("zone_id", type=str)
+
+    # reading add
+    p_reading = sub.add_parser("reading-add", help="Add a temperature reading")
+    p_reading.add_argument("zone_id", type=str)
+    p_reading.add_argument("temp_celsius", type=float)
+    p_reading.add_argument("--sensor-root", type=str, default="")
+
+    # band add
+    p_band = sub.add_parser("band-add", help="Add hysteresis band")
+    p_band.add_argument("zone_id", type=str)
+    p_band.add_argument("low_celsius", type=float)
+    p_band.add_argument("high_celsius", type=float)
+
+    # schedule add
+    p_sched = sub.add_parser("schedule-add", help="Add schedule window")
+    p_sched.add_argument("zone_id", type=str)
+    p_sched.add_argument("start_block", type=int)
+    p_sched.add_argument("end_block", type=int)
+    p_sched.add_argument("--setpoint", type=float, default=22.0, help="Setpoint Celsius")
+
+    # link
+    p_link = sub.add_parser("link", help="Link two zones")
+    p_link.add_argument("zone_a", type=str)
+    p_link.add_argument("zone_b", type=str)
+
+    # save / load
+    p_save = sub.add_parser("save", help="Save store to config dir")
+    p_save.add_argument("--path", type=str, default="", help="Override path")
+    p_load = sub.add_parser("load", help="Load store from config dir")
+    p_load.add_argument("--path", type=str, default="", help="Override path")
+
+    # effective setpoint
+    p_eff = sub.add_parser("effective-setpoint", help="Get effective setpoint at block")
+    p_eff.add_argument("zone_id", type=str)
+    p_eff.add_argument("block_num", type=int)
+
+    args = parser.parse_args()
+
+    if args.version:
+        print(f"{ICECOOL_APP_NAME} v{ICECOOL_VERSION[0]}.{ICECOOL_VERSION[1]}")
+        return 0
+
+    config_dir = Path(args.config_dir) if args.config_dir else Path.home() / ICECOOL_CONFIG_DIR
+    store = IceCoolStore()
+    load_path = config_dir / "store"
+    if (config_dir / "store" / ICECOOL_ZONES_FILE).exists():
+        store.load_from_dir(load_path)
+
+    if args.command == "zone-add":
+        setpoint_d = celsius_to_decicelsius(args.setpoint)
+        cmd_zone_add(store, args.zone_id, setpoint_d, args.cooling, args.label)
+    elif args.command == "zone-list":
+        cmd_zone_list(store)
+    elif args.command == "zone-show":
+        cmd_zone_show(store, args.zone_id)
+    elif args.command == "reading-add":
+        cmd_reading_add(store, args.zone_id, args.temp_celsius, args.sensor_root)
+    elif args.command == "band-add":
+        cmd_band_add(store, args.zone_id, args.low_celsius, args.high_celsius)
+    elif args.command == "schedule-add":
+        setpoint_d = celsius_to_decicelsius(args.setpoint)
+        cmd_schedule_add(store, args.zone_id, args.start_block, args.end_block, setpoint_d)
+    elif args.command == "link":

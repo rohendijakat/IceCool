@@ -71,3 +71,76 @@ class IceCoolSetpointOutOfBoundsError(Exception):
     def __init__(self, value: int, min_v: int, max_v: int) -> None:
         super().__init__(f"Setpoint {value} out of bounds [{min_v}, {max_v}]")
         self.value = value
+        self.min_v = min_v
+        self.max_v = max_v
+
+
+class IceCoolReadingIndexError(Exception):
+    def __init__(self, index: int, maximum: int) -> None:
+        super().__init__(f"Reading index {index} out of range [0, {maximum})")
+        self.index = index
+        self.maximum = maximum
+
+
+class IceCoolHysteresisBandError(Exception):
+    def __init__(self, low: float, high: float) -> None:
+        super().__init__(f"Invalid hysteresis band: low={low} must be < high={high}")
+        self.low = low
+        self.high = high
+
+
+class IceCoolScheduleWindowError(Exception):
+    def __init__(self, start: int, end: int) -> None:
+        super().__init__(f"Invalid schedule window: start={start} must be < end={end}")
+        self.start = start
+        self.end = end
+
+
+class IceCoolConfigError(Exception):
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
+class IceCoolRPCError(Exception):
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
+class IceCoolLabelTooLongError(Exception):
+    def __init__(self, length: int, max_len: int) -> None:
+        super().__init__(f"Label length {length} exceeds max {max_len}")
+        self.length = length
+        self.max_len = max_len
+
+
+# -----------------------------------------------------------------------------
+# DATA STRUCTURES
+# -----------------------------------------------------------------------------
+
+
+@dataclass
+class ZoneRecord:
+    zone_id: str
+    zone_hash: str
+    setpoint_decicelsius: int
+    created_at: float
+    cooling_preferred: bool
+    last_suggested_setpoint: int = 0
+    calibration_offset: int = 0
+    humidity_snapshot: int = 0
+    thermostat_mode: int = ICECOOL_THERMOSTAT_MODE_COOL
+    frost_guard_enabled: bool = False
+    label: str = ""
+
+    def setpoint_celsius(self) -> float:
+        return self.setpoint_decicelsius / 10.0
+
+    def setpoint_fahrenheit(self) -> float:
+        return self.setpoint_celsius() * 9 / 5 + 32
+
+
+@dataclass
+class SetpointReadingRecord:
+    zone_id: str
+    reading_index: int
+    temp_scaled: int

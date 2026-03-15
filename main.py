@@ -290,3 +290,76 @@ def suggest_cooling(reading_scaled: int, setpoint_scaled: int, high_threshold_sc
 
 def suggest_heating(reading_scaled: int, setpoint_scaled: int, low_threshold_scaled: int) -> bool:
     return reading_scaled < low_threshold_scaled
+
+
+# -----------------------------------------------------------------------------
+# IN-MEMORY STORE
+# -----------------------------------------------------------------------------
+
+
+class IceCoolStore:
+    def __init__(self) -> None:
+        self._zones: Dict[str, ZoneRecord] = {}
+        self._readings: Dict[str, List[SetpointReadingRecord]] = {}
+        self._bands: Dict[str, List[HysteresisBandRecord]] = {}
+        self._schedules: Dict[str, List[ScheduleWindowRecord]] = {}
+        self._linked: Dict[str, List[str]] = {}
+        self._archived: set = set()
+
+    def add_zone(self, z: ZoneRecord) -> None:
+        validate_setpoint(z.setpoint_decicelsius)
+        if z.zone_id in self._zones:
+            raise IceCoolConfigError(f"Zone already exists: {z.zone_id}")
+        self._zones[z.zone_id] = z
+        self._readings[z.zone_id] = []
+        self._bands[z.zone_id] = []
+        self._schedules[z.zone_id] = []
+        self._linked[z.zone_id] = []
+
+    def get_zone(self, zone_id: str) -> ZoneRecord:
+        if zone_id not in self._zones:
+            raise IceCoolZoneNotFoundError(zone_id)
+        return self._zones[zone_id]
+
+    def list_zone_ids(self) -> List[str]:
+        return list(self._zones.keys())
+
+    def archive_zone(self, zone_id: str) -> None:
+        self.get_zone(zone_id)
+        self._archived.add(zone_id)
+
+    def is_archived(self, zone_id: str) -> bool:
+        return zone_id in self._archived
+
+    def add_reading(self, r: SetpointReadingRecord) -> None:
+        self.get_zone(r.zone_id)
+        if r.zone_id not in self._readings:
+            self._readings[r.zone_id] = []
+        arr = self._readings[r.zone_id]
+        if r.reading_index >= ICECOOL_MAX_READINGS_PER_ZONE:
+            raise IceCoolReadingIndexError(r.reading_index, ICECOOL_MAX_READINGS_PER_ZONE)
+        while len(arr) <= r.reading_index:
+            arr.append(None)
+        arr[r.reading_index] = r
+
+    def get_reading(self, zone_id: str, index: int) -> Optional[SetpointReadingRecord]:
+        arr = self._readings.get(zone_id, [])
+        if index >= len(arr):
+            return None
+        return arr[index]
+
+    def reading_count(self, zone_id: str) -> int:
+        arr = self._readings.get(zone_id, [])
+        return sum(1 for x in arr if x is not None)
+
+    def add_band(self, b: HysteresisBandRecord) -> None:
+        self.get_zone(b.zone_id)
+        validate_hysteresis_band(b.low_threshold_scaled, b.high_threshold_scaled)
+        if b.zone_id not in self._bands:
+            self._bands[b.zone_id] = []
+        if len(self._bands[b.zone_id]) >= ICECOOL_MAX_HYSTERESIS_BANDS:
+            raise IceCoolConfigError("Max hysteresis bands reached")
+        self._bands[b.zone_id].append(b)
+
+    def get_bands(self, zone_id: str) -> List[HysteresisBandRecord]:
+        return list(self._bands.get(zone_id, []))

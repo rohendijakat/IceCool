@@ -509,3 +509,76 @@ def load_config() -> IceCoolConfig:
         return IceCoolConfig()
     data = json.loads(p.read_text())
     return IceCoolConfig(
+        rpc_url=data.get("rpc_url", ICECOOL_DEFAULT_RPC),
+        contract_address=data.get("contract_address", ""),
+        private_key_path=data.get("private_key_path", ""),
+        chain_id=data.get("chain_id", 1),
+        anchor_fee_wei=data.get("anchor_fee_wei", 1_000_000_000_000_000),
+        poll_interval_seconds=data.get("poll_interval_seconds", 15.0),
+        default_setpoint_decicelsius=data.get("default_setpoint_decicelsius", 220),
+        log_level=data.get("log_level", "INFO"),
+    )
+
+
+def save_config(cfg: IceCoolConfig) -> None:
+    p = config_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "rpc_url": cfg.rpc_url,
+        "contract_address": cfg.contract_address,
+        "private_key_path": cfg.private_key_path,
+        "chain_id": cfg.chain_id,
+        "anchor_fee_wei": cfg.anchor_fee_wei,
+        "poll_interval_seconds": cfg.poll_interval_seconds,
+        "default_setpoint_decicelsius": cfg.default_setpoint_decicelsius,
+        "log_level": cfg.log_level,
+    }, indent=2))
+
+
+# -----------------------------------------------------------------------------
+# CLI: ZONE COMMANDS
+# -----------------------------------------------------------------------------
+
+
+def cmd_zone_add(store: IceCoolStore, zone_id: str, setpoint_decicelsius: int, cooling: bool, label: str = "") -> None:
+    h = compute_zone_hash(zone_id, setpoint_decicelsius, cooling)
+    z = ZoneRecord(
+        zone_id=zone_id,
+        zone_hash=h,
+        setpoint_decicelsius=setpoint_decicelsius,
+        created_at=time.time(),
+        cooling_preferred=cooling,
+        label=label[:ICECOOL_MAX_LABEL_LENGTH] if label else "",
+    )
+    store.add_zone(z)
+    print(f"Zone {zone_id} added with setpoint {setpoint_decicelsius} (0.1°C), cooling_preferred={cooling}")
+
+
+def cmd_zone_list(store: IceCoolStore) -> None:
+    for zid in store.list_zone_ids():
+        z = store.get_zone(zid)
+        print(f"  {z.zone_id}  setpoint={z.setpoint_decicelsius} ({(z.setpoint_decicelsius/10):.1f}°C)  cooling={z.cooling_preferred}  label={z.label or '-'}")
+
+
+def cmd_zone_show(store: IceCoolStore, zone_id: str) -> None:
+    z = store.get_zone(zone_id)
+    n_read = store.reading_count(zone_id)
+    bands = store.get_bands(zone_id)
+    sched = store.get_schedule_windows(zone_id)
+    linked = store.get_linked(zone_id)
+    print(f"Zone: {z.zone_id}")
+    print(f"  setpoint: {z.setpoint_decicelsius} ({z.setpoint_celsius():.1f}°C)")
+    print(f"  cooling_preferred: {z.cooling_preferred}")
+    print(f"  label: {z.label or '-'}")
+    print(f"  readings: {n_read}")
+    print(f"  hysteresis bands: {len(bands)}")
+    print(f"  schedule windows: {len(sched)}")
+    print(f"  linked zones: {linked}")
+
+
+def cmd_reading_add(store: IceCoolStore, zone_id: str, temp_celsius: float, sensor_root: str = "") -> None:
+    store.get_zone(zone_id)
+    idx = store.reading_count(zone_id)
+    scaled = celsius_to_scaled(temp_celsius)
+    if not sensor_root:
+        sensor_root = hashlib.sha256(f"{zone_id}{idx}{time.time()}".encode()).hexdigest()

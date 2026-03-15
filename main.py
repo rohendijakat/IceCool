@@ -144,3 +144,76 @@ class SetpointReadingRecord:
     zone_id: str
     reading_index: int
     temp_scaled: int
+    sensor_root: str
+    recorded_at: float
+
+    @property
+    def temp_decicelsius(self) -> float:
+        return self.temp_scaled / ICECOOL_TEMP_SCALE
+
+    @property
+    def temp_celsius(self) -> float:
+        return self.temp_decicelsius / 10.0
+
+
+@dataclass
+class HysteresisBandRecord:
+    zone_id: str
+    band_index: int
+    low_threshold_scaled: int
+    high_threshold_scaled: int
+
+    @property
+    def low_celsius(self) -> float:
+        return self.low_threshold_scaled / ICECOOL_TEMP_SCALE / 10.0
+
+    @property
+    def high_celsius(self) -> float:
+        return self.high_threshold_scaled / ICECOOL_TEMP_SCALE / 10.0
+
+
+@dataclass
+class ScheduleWindowRecord:
+    zone_id: str
+    start_block: int
+    end_block: int
+    setpoint_decicelsius: int
+
+
+@dataclass
+class IceCoolConfig:
+    rpc_url: str = ICECOOL_DEFAULT_RPC
+    contract_address: str = ""
+    private_key_path: str = ""
+    chain_id: int = 1
+    anchor_fee_wei: int = 1_000_000_000_000_000
+    poll_interval_seconds: float = 15.0
+    default_setpoint_decicelsius: int = 220  # 22.0 C
+    log_level: str = "INFO"
+
+
+# -----------------------------------------------------------------------------
+# TEMPERATURE CONVERSION
+# -----------------------------------------------------------------------------
+
+
+def celsius_to_decicelsius(celsius: float) -> int:
+    return int(round(celsius * 10))
+
+
+def decicelsius_to_celsius(decicelsius: Union[int, float]) -> float:
+    return decicelsius / 10.0
+
+
+def fahrenheit_to_decicelsius(fahrenheit: float) -> int:
+    return int(round((fahrenheit - 32) * 5 / 9 * 10))
+
+
+def decicelsius_to_fahrenheit(decicelsius: Union[int, float]) -> float:
+    return decicelsius / 10.0 * 9 / 5 + 32
+
+
+def celsius_to_scaled(celsius: float) -> int:
+    return int(round(celsius * 10 * ICECOOL_TEMP_SCALE))
+
+

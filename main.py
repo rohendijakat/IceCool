@@ -363,3 +363,76 @@ class IceCoolStore:
 
     def get_bands(self, zone_id: str) -> List[HysteresisBandRecord]:
         return list(self._bands.get(zone_id, []))
+
+    def add_schedule_window(self, w: ScheduleWindowRecord) -> None:
+        self.get_zone(w.zone_id)
+        validate_schedule_window(w.start_block, w.end_block)
+        validate_setpoint(w.setpoint_decicelsius)
+        arr = self._schedules.get(w.zone_id, [])
+        if len(arr) >= ICECOOL_MAX_SCHEDULE_WINDOWS:
+            raise IceCoolConfigError("Max schedule windows reached")
+        self._schedules[w.zone_id] = arr
+        arr.append(w)
+
+    def get_schedule_windows(self, zone_id: str) -> List[ScheduleWindowRecord]:
+        return list(self._schedules.get(zone_id, []))
+
+    def link_zones(self, zone_a: str, zone_b: str) -> None:
+        self.get_zone(zone_a)
+        self.get_zone(zone_b)
+        if zone_a == zone_b:
+            raise IceCoolConfigError("Cannot link zone to itself")
+        for zid, links in self._linked.items():
+            if zone_a == zid and zone_b in links:
+                raise IceCoolConfigError("Zones already linked")
+        self._linked.setdefault(zone_a, []).append(zone_b)
+        self._linked.setdefault(zone_b, []).append(zone_a)
+
+    def get_linked(self, zone_id: str) -> List[str]:
+        return list(self._linked.get(zone_id, []))
+
+    def effective_setpoint_at_block(self, zone_id: str, block_num: int) -> int:
+        z = self.get_zone(zone_id)
+        for w in self.get_schedule_windows(zone_id):
+            if w.start_block <= block_num <= w.end_block:
+                return w.setpoint_decicelsius
+        return z.setpoint_decicelsius
+
+    def save_to_dir(self, base_path: Path) -> None:
+        base_path.mkdir(parents=True, exist_ok=True)
+        zones_data = []
+        for z in self._zones.values():
+            zones_data.append({
+                "zone_id": z.zone_id,
+                "zone_hash": z.zone_hash,
+                "setpoint_decicelsius": z.setpoint_decicelsius,
+                "created_at": z.created_at,
+                "cooling_preferred": z.cooling_preferred,
+                "last_suggested_setpoint": z.last_suggested_setpoint,
+                "calibration_offset": z.calibration_offset,
+                "humidity_snapshot": z.humidity_snapshot,
+                "thermostat_mode": z.thermostat_mode,
+                "frost_guard_enabled": z.frost_guard_enabled,
+                "label": z.label,
+            })
+        (base_path / ICECOOL_ZONES_FILE).write_text(json.dumps(zones_data, indent=2))
+        readings_data = {}
+        for zone_id, arr in self._readings.items():
+            readings_data[zone_id] = [
+                {
+                    "reading_index": r.reading_index,
+                    "temp_scaled": r.temp_scaled,
+                    "sensor_root": r.sensor_root,
+                    "recorded_at": r.recorded_at,
+                }
+                for r in arr if r is not None
+            ]
+        (base_path / ICECOOL_READINGS_FILE).write_text(json.dumps(readings_data, indent=2))
+        sched_data = {}
+        for zone_id, arr in self._schedules.items():
+            sched_data[zone_id] = [
+                {"start_block": w.start_block, "end_block": w.end_block, "setpoint_decicelsius": w.setpoint_decicelsius}
+                for w in arr
+            ]
+        (base_path / ICECOOL_SCHEDULES_FILE).write_text(json.dumps(sched_data, indent=2))
+

@@ -436,3 +436,76 @@ class IceCoolStore:
             ]
         (base_path / ICECOOL_SCHEDULES_FILE).write_text(json.dumps(sched_data, indent=2))
 
+    def load_from_dir(self, base_path: Path) -> None:
+        zpath = base_path / ICECOOL_ZONES_FILE
+        if not zpath.exists():
+            return
+        zones_data = json.loads(zpath.read_text())
+        for d in zones_data:
+            z = ZoneRecord(
+                zone_id=d["zone_id"],
+                zone_hash=d["zone_hash"],
+                setpoint_decicelsius=d["setpoint_decicelsius"],
+                created_at=d["created_at"],
+                cooling_preferred=d["cooling_preferred"],
+                last_suggested_setpoint=d.get("last_suggested_setpoint", 0),
+                calibration_offset=d.get("calibration_offset", 0),
+                humidity_snapshot=d.get("humidity_snapshot", 0),
+                thermostat_mode=d.get("thermostat_mode", ICECOOL_THERMOSTAT_MODE_COOL),
+                frost_guard_enabled=d.get("frost_guard_enabled", False),
+                label=d.get("label", ""),
+            )
+            self._zones[z.zone_id] = z
+            self._readings[z.zone_id] = []
+            self._bands[z.zone_id] = []
+            self._schedules[z.zone_id] = []
+            self._linked[z.zone_id] = []
+        rpath = base_path / ICECOOL_READINGS_FILE
+        if rpath.exists():
+            readings_data = json.loads(rpath.read_text())
+            for zone_id, arr in readings_data.items():
+                if zone_id not in self._readings:
+                    self._readings[zone_id] = []
+                for d in arr:
+                    r = SetpointReadingRecord(
+                        zone_id=zone_id,
+                        reading_index=d["reading_index"],
+                        temp_scaled=d["temp_scaled"],
+                        sensor_root=d["sensor_root"],
+                        recorded_at=d["recorded_at"],
+                    )
+                    while len(self._readings[zone_id]) <= r.reading_index:
+                        self._readings[zone_id].append(None)
+                    self._readings[zone_id][r.reading_index] = r
+        spath = base_path / ICECOOL_SCHEDULES_FILE
+        if spath.exists():
+            sched_data = json.loads(spath.read_text())
+            for zone_id, arr in sched_data.items():
+                if zone_id not in self._schedules:
+                    self._schedules[zone_id] = []
+                for d in arr:
+                    w = ScheduleWindowRecord(
+                        zone_id=zone_id,
+                        start_block=d["start_block"],
+                        end_block=d["end_block"],
+                        setpoint_decicelsius=d["setpoint_decicelsius"],
+                    )
+                    self._schedules[zone_id].append(w)
+
+
+# -----------------------------------------------------------------------------
+# CONFIG LOAD / SAVE
+# -----------------------------------------------------------------------------
+
+
+def config_path() -> Path:
+    home = Path.home()
+    return home / ICECOOL_CONFIG_DIR / "config.json"
+
+
+def load_config() -> IceCoolConfig:
+    p = config_path()
+    if not p.exists():
+        return IceCoolConfig()
+    data = json.loads(p.read_text())
+    return IceCoolConfig(

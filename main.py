@@ -217,3 +217,76 @@ def celsius_to_scaled(celsius: float) -> int:
     return int(round(celsius * 10 * ICECOOL_TEMP_SCALE))
 
 
+def scaled_to_celsius(scaled: int) -> float:
+    return scaled / ICECOOL_TEMP_SCALE / 10.0
+
+
+def dewpoint_approx(temp_decicelsius: float, humidity_percent: int) -> float:
+    if humidity_percent <= 0:
+        return temp_decicelsius / 10.0
+    t = temp_decicelsius / 10.0
+    h = humidity_percent / 100.0
+    a = 17.27
+    b = 237.7
+    numer = a * t / (b + t) + math.log(max(h, 0.01))
+    denom = a - numer
+    if abs(denom) < 1e-9:
+        return t
+    return (b * numer) / denom
+
+
+# -----------------------------------------------------------------------------
+# ZONE HASH & VALIDATION
+# -----------------------------------------------------------------------------
+
+
+def compute_zone_hash(zone_id: str, setpoint: int, cooling: bool, extra: str = "") -> str:
+    payload = f"FridgAI.Climate.v12|{zone_id}|{setpoint}|{cooling}|{extra}"
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def bytes32_from_hex(s: str) -> str:
+    if s.startswith("0x"):
+        s = s[2:]
+    return "0x" + s.zfill(64)[:64]
+
+
+def validate_setpoint(decicelsius: int) -> None:
+    if not (ICECOOL_MIN_SETPOINT_DECICELSIUS <= decicelsius <= ICECOOL_MAX_SETPOINT_DECICELSIUS):
+        raise IceCoolSetpointOutOfBoundsError(
+            decicelsius, ICECOOL_MIN_SETPOINT_DECICELSIUS, ICECOOL_MAX_SETPOINT_DECICELSIUS
+        )
+
+
+def validate_label(label: str) -> None:
+    if len(label) > ICECOOL_MAX_LABEL_LENGTH:
+        raise IceCoolLabelTooLongError(len(label), ICECOOL_MAX_LABEL_LENGTH)
+
+
+def validate_hysteresis_band(low_scaled: int, high_scaled: int) -> None:
+    if low_scaled >= high_scaled:
+        raise IceCoolHysteresisBandError(
+            scaled_to_celsius(low_scaled), scaled_to_celsius(high_scaled)
+        )
+
+
+def validate_schedule_window(start_block: int, end_block: int) -> None:
+    if start_block >= end_block:
+        raise IceCoolScheduleWindowError(start_block, end_block)
+
+
+# -----------------------------------------------------------------------------
+# HYSTERESIS LOGIC
+# -----------------------------------------------------------------------------
+
+
+def within_hysteresis(reading_scaled: int, low_scaled: int, high_scaled: int) -> bool:
+    return low_scaled <= reading_scaled <= high_scaled
+
+
+def suggest_cooling(reading_scaled: int, setpoint_scaled: int, high_threshold_scaled: int) -> bool:
+    return reading_scaled > high_threshold_scaled
+
+
+def suggest_heating(reading_scaled: int, setpoint_scaled: int, low_threshold_scaled: int) -> bool:
+    return reading_scaled < low_threshold_scaled

@@ -1312,3 +1312,76 @@ def get_all_constants() -> Dict[str, Any]:
 # -----------------------------------------------------------------------------
 # READINGS AGGREGATION (MIN/MAX/AVG OVER WINDOW)
 # -----------------------------------------------------------------------------
+
+
+def aggregate_readings_by_time(
+    readings: List[Optional[SetpointReadingRecord]],
+    window_seconds: float,
+) -> List[Dict[str, Any]]:
+    valid = [r for r in readings if r is not None]
+    if not valid:
+        return []
+    valid.sort(key=lambda r: r.recorded_at)
+    buckets: Dict[int, List[SetpointReadingRecord]] = {}
+    for r in valid:
+        bucket = int(r.recorded_at / window_seconds) * int(window_seconds)
+        buckets.setdefault(bucket, []).append(r)
+    out = []
+    for bucket_ts, arr in sorted(buckets.items()):
+        temps = [r.temp_celsius for r in arr]
+        out.append({
+            "timestamp": bucket_ts,
+            "min_celsius": min(temps),
+            "max_celsius": max(temps),
+            "avg_celsius": sum(temps) / len(temps),
+            "count": len(arr),
+        })
+    return out
+
+
+# -----------------------------------------------------------------------------
+# HYSTERESIS BAND FROM SETPOINT + DEADBAND
+# -----------------------------------------------------------------------------
+
+
+def hysteresis_band_from_setpoint(setpoint_celsius: float, deadband_celsius: float) -> Tuple[float, float]:
+    low = setpoint_celsius - deadband_celsius
+    high = setpoint_celsius + deadband_celsius
+    return (low, high)
+
+
+def hysteresis_band_scaled_from_setpoint(setpoint_decicelsius: int, deadband_decicelsius: int) -> Tuple[int, int]:
+    low = setpoint_decicelsius - deadband_decicelsius
+    high = setpoint_decicelsius + deadband_decicelsius
+    return (celsius_to_scaled(low / 10.0), celsius_to_scaled(high / 10.0))
+
+
+# -----------------------------------------------------------------------------
+# ZONE ID NORMALIZATION
+# -----------------------------------------------------------------------------
+
+
+def normalize_zone_id(raw: str) -> str:
+    return raw.strip().lower().replace(" ", "_")
+
+
+def validate_zone_id_format(zone_id: str) -> bool:
+    if not zone_id or len(zone_id) > 64:
+        return False
+    allowed = set("abcdefghijklmnopqrstuvwxyz0123456789_-")
+    return all(c in allowed for c in zone_id.lower())
+
+
+# -----------------------------------------------------------------------------
+# FAN PRESET HELPERS
+# -----------------------------------------------------------------------------
+
+
+def fan_speed_to_percent(level: int) -> int:
+    return clamp_int(level, 0, 100)
+
+
+def clamp_int(x: int, lo: int, hi: int) -> int:
+    if x < lo:
+        return lo
+    if x > hi:

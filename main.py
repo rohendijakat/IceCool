@@ -1239,3 +1239,76 @@ def apply_default_zones_preset(store: IceCoolStore) -> int:
 # CHAIN HELPERS (HEX ENCODING)
 # -----------------------------------------------------------------------------
 
+
+def zone_id_to_bytes32_hex(zone_id: str) -> str:
+    h = hashlib.sha256(zone_id.encode()).digest()
+    return "0x" + h.hex()
+
+
+def setpoint_reading_to_calldata(zone_id: str, reading_index: int, temp_scaled: int, sensor_root: str) -> Dict[str, Any]:
+    return {
+        "zone_id_hex": zone_id_to_bytes32_hex(zone_id),
+        "reading_index": reading_index,
+        "temp_scaled": temp_scaled,
+        "sensor_root_hex": "0x" + (sensor_root if len(sensor_root) == 64 else hashlib.sha256(sensor_root.encode()).hexdigest()),
+    }
+
+
+# -----------------------------------------------------------------------------
+# POLLING SIMULATOR (FOR DEMO)
+# -----------------------------------------------------------------------------
+
+
+def simulate_readings(store: IceCoolStore, zone_id: str, base_temp: float, count: int, noise: float = 0.5) -> int:
+    import random
+    store.get_zone(zone_id)
+    added = 0
+    for i in range(count):
+        t = base_temp + random.gauss(0, noise)
+        try:
+            cmd_reading_add(store, zone_id, t, "")
+            added += 1
+        except Exception:
+            break
+    return added
+
+
+# -----------------------------------------------------------------------------
+# VERSION CHECK
+# -----------------------------------------------------------------------------
+
+
+def version_string() -> str:
+    return f"{ICECOOL_VERSION[0]}.{ICECOOL_VERSION[1]}"
+
+
+def compatible_contract_version() -> str:
+    return "12"
+
+
+# -----------------------------------------------------------------------------
+# CONSTANTS EXPORT (FOR EXTERNAL USE)
+# -----------------------------------------------------------------------------
+
+
+def get_all_constants() -> Dict[str, Any]:
+    return {
+        "ICECOOL_VERSION": ICECOOL_VERSION,
+        "ICECOOL_TEMP_SCALE": ICECOOL_TEMP_SCALE,
+        "ICECOOL_MIN_SETPOINT_DECICELSIUS": ICECOOL_MIN_SETPOINT_DECICELSIUS,
+        "ICECOOL_MAX_SETPOINT_DECICELSIUS": ICECOOL_MAX_SETPOINT_DECICELSIUS,
+        "ICECOOL_MAX_READINGS_PER_ZONE": ICECOOL_MAX_READINGS_PER_ZONE,
+        "ICECOOL_MAX_HYSTERESIS_BANDS": ICECOOL_MAX_HYSTERESIS_BANDS,
+        "ICECOOL_MAX_SCHEDULE_WINDOWS": ICECOOL_MAX_SCHEDULE_WINDOWS,
+        "ICECOOL_MAX_BATCH_ZONES": ICECOOL_MAX_BATCH_ZONES,
+        "ICECOOL_MAX_BATCH_READINGS": ICECOOL_MAX_BATCH_READINGS,
+        "ICECOOL_THERMOSTAT_MODE_OFF": ICECOOL_THERMOSTAT_MODE_OFF,
+        "ICECOOL_THERMOSTAT_MODE_COOL": ICECOOL_THERMOSTAT_MODE_COOL,
+        "ICECOOL_THERMOSTAT_MODE_HEAT": ICECOOL_THERMOSTAT_MODE_HEAT,
+        "ICECOOL_THERMOSTAT_MODE_AUTO": ICECOOL_THERMOSTAT_MODE_AUTO,
+    }
+
+
+# -----------------------------------------------------------------------------
+# READINGS AGGREGATION (MIN/MAX/AVG OVER WINDOW)
+# -----------------------------------------------------------------------------

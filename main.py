@@ -1458,3 +1458,76 @@ def average_setpoint(store: IceCoolStore) -> float:
 # MAIN (WITH CONFIG, EXPORT, IMPORT, API)
 # -----------------------------------------------------------------------------
 
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(prog=ICECOOL_APP_NAME, description="Household climatic control companion for FridgAI")
+    parser.add_argument("--version", action="store_true", help="Show version")
+    parser.add_argument("--config-dir", type=str, default="", help="Config directory (default: ~/.icecool)")
+    parser.add_argument("--api", action="store_true", help="Run API server")
+    parser.add_argument("--api-host", type=str, default="127.0.0.1")
+    parser.add_argument("--api-port", type=int, default=8765)
+    sub = parser.add_subparsers(dest="command", help="Commands")
+
+    p_add = sub.add_parser("zone-add", help="Add a zone")
+    p_add.add_argument("zone_id", type=str, help="Zone ID")
+    p_add.add_argument("--setpoint", type=float, default=22.0, help="Setpoint in Celsius")
+    p_add.add_argument("--cooling", action="store_true", help="Prefer cooling")
+    p_add.add_argument("--label", type=str, default="", help="Optional label")
+
+    sub.add_parser("zone-list", help="List zones")
+
+    p_show = sub.add_parser("zone-show", help="Show zone details")
+    p_show.add_argument("zone_id", type=str)
+
+    p_reading = sub.add_parser("reading-add", help="Add a temperature reading")
+    p_reading.add_argument("zone_id", type=str)
+    p_reading.add_argument("temp_celsius", type=float)
+    p_reading.add_argument("--sensor-root", type=str, default="")
+
+    p_band = sub.add_parser("band-add", help="Add hysteresis band")
+    p_band.add_argument("zone_id", type=str)
+    p_band.add_argument("low_celsius", type=float)
+    p_band.add_argument("high_celsius", type=float)
+
+    p_sched = sub.add_parser("schedule-add", help="Add schedule window")
+    p_sched.add_argument("zone_id", type=str)
+    p_sched.add_argument("start_block", type=int)
+    p_sched.add_argument("end_block", type=int)
+    p_sched.add_argument("--setpoint", type=float, default=22.0, help="Setpoint Celsius")
+
+    p_link = sub.add_parser("link", help="Link two zones")
+    p_link.add_argument("zone_a", type=str)
+    p_link.add_argument("zone_b", type=str)
+
+    p_save = sub.add_parser("save", help="Save store to config dir")
+    p_save.add_argument("--path", type=str, default="", help="Override path")
+    p_load = sub.add_parser("load", help="Load store from config dir")
+    p_load.add_argument("--path", type=str, default="", help="Override path")
+
+    p_eff = sub.add_parser("effective-setpoint", help="Get effective setpoint at block")
+    p_eff.add_argument("zone_id", type=str)
+    p_eff.add_argument("block_num", type=int)
+
+    p_config = sub.add_parser("config", help="Show or set config")
+    p_config.add_argument("subcommand", type=str, choices=["show", "set"], nargs="?")
+    p_config.add_argument("--rpc-url", type=str, default=None)
+    p_config.add_argument("--contract", type=str, default=None)
+    p_config.add_argument("--chain-id", type=int, default=None)
+
+    p_export = sub.add_parser("export-csv", help="Export zones to CSV")
+    p_export.add_argument("path", type=str)
+    p_import = sub.add_parser("import-csv", help="Import zones from CSV")
+    p_import.add_argument("path", type=str)
+
+    p_preset = sub.add_parser("preset-default-zones", help="Add default zone preset")
+    p_sim = sub.add_parser("simulate-readings", help="Simulate N readings for a zone")
+    p_sim.add_argument("zone_id", type=str)
+    p_sim.add_argument("count", type=int)
+    p_sim.add_argument("--base-temp", type=float, default=22.0)
+    p_sim.add_argument("--noise", type=float, default=0.5)
+
+    args = parser.parse_args()
+
+    if args.version:
+        print(f"{ICECOOL_APP_NAME} v{version_string()}")
+        return 0

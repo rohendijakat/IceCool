@@ -1093,3 +1093,76 @@ def comfort_index(temp_celsius: float, humidity_percent: int) -> float:
 # -----------------------------------------------------------------------------
 # SCHEDULE HELPERS (BLOCK -> SETPOINT)
 # -----------------------------------------------------------------------------
+
+
+def get_active_schedule_at_block(windows: List[ScheduleWindowRecord], block_num: int) -> Optional[ScheduleWindowRecord]:
+    for w in windows:
+        if w.start_block <= block_num <= w.end_block:
+            return w
+    return None
+
+
+def next_schedule_change(windows: List[ScheduleWindowRecord], from_block: int) -> Optional[int]:
+    candidates = []
+    for w in windows:
+        if w.start_block > from_block:
+            candidates.append(w.start_block)
+        if w.end_block > from_block:
+            candidates.append(w.end_block)
+    return min(candidates) if candidates else None
+
+
+# -----------------------------------------------------------------------------
+# TEMPERATURE STATS (FROM READINGS)
+# -----------------------------------------------------------------------------
+
+
+def readings_stats(readings: List[SetpointReadingRecord]) -> Dict[str, float]:
+    if not readings:
+        return {"min": 0, "max": 0, "avg": 0, "count": 0}
+    temps = [r.temp_celsius for r in readings if r is not None]
+    if not temps:
+        return {"min": 0, "max": 0, "avg": 0, "count": 0}
+    return {
+        "min": min(temps),
+        "max": max(temps),
+        "avg": sum(temps) / len(temps),
+        "count": len(temps),
+    }
+
+
+def readings_recent(readings: List[Optional[SetpointReadingRecord]], last_n: int) -> List[SetpointReadingRecord]:
+    valid = [r for r in readings if r is not None]
+    valid.sort(key=lambda r: r.recorded_at, reverse=True)
+    return valid[:last_n]
+
+
+# -----------------------------------------------------------------------------
+# ZONE COMPARISON
+# -----------------------------------------------------------------------------
+
+
+def zones_diff(store_before: IceCoolStore, store_after: IceCoolStore) -> List[str]:
+    before_ids = set(store_before.list_zone_ids())
+    after_ids = set(store_after.list_zone_ids())
+    added = after_ids - before_ids
+    removed = before_ids - after_ids
+    lines = []
+    for zid in added:
+        lines.append(f"+ {zid}")
+    for zid in removed:
+        lines.append(f"- {zid}")
+    return lines
+
+
+# -----------------------------------------------------------------------------
+# SANITY CHECKS (PRE-SUBMIT)
+# -----------------------------------------------------------------------------
+
+
+def check_zone_before_register(z: ZoneRecord) -> List[str]:
+    errors = []
+    try:
+        validate_setpoint(z.setpoint_decicelsius)
+    except IceCoolSetpointOutOfBoundsError as e:
+        errors.append(str(e))

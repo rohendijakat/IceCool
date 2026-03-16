@@ -1531,3 +1531,76 @@ if __name__ == "__main__":
     if args.version:
         print(f"{ICECOOL_APP_NAME} v{version_string()}")
         return 0
+
+    config_dir = Path(args.config_dir) if args.config_dir else Path.home() / ICECOOL_CONFIG_DIR
+    store = IceCoolStore()
+    load_path = config_dir / "store"
+    if (load_path / ICECOOL_ZONES_FILE).exists():
+        store.load_from_dir(load_path)
+
+    if getattr(args, "api", False):
+        run_api_server(store, args.api_host, args.api_port)
+        return 0
+
+    if getattr(args, "command", None) == "config":
+        if getattr(args, "subcommand", None) == "set":
+            cmd_config_set(args.rpc_url, args.contract, args.chain_id)
+        else:
+            cmd_config_show()
+        sys.exit(0)
+
+    if getattr(args, "command", None) == "export-csv":
+        export_zones_csv(store, Path(args.path))
+        print(f"Exported to {args.path}")
+        sys.exit(0)
+
+    if getattr(args, "command", None) == "import-csv":
+        n = import_zones_csv(store, Path(args.path))
+        store.save_to_dir(load_path)
+        print(f"Imported {n} zones")
+        sys.exit(0)
+
+    if getattr(args, "command", None) == "preset-default-zones":
+        n = apply_default_zones_preset(store)
+        store.save_to_dir(load_path)
+        print(f"Added {n} default zones")
+        sys.exit(0)
+
+    if getattr(args, "command", None) == "simulate-readings":
+        added = simulate_readings(store, args.zone_id, args.base_temp, args.count, args.noise)
+        store.save_to_dir(load_path)
+        print(f"Added {added} simulated readings for {args.zone_id}")
+        sys.exit(0)
+
+    if args.command == "zone-add":
+        setpoint_d = celsius_to_decicelsius(args.setpoint)
+        cmd_zone_add(store, args.zone_id, setpoint_d, args.cooling, args.label)
+    elif args.command == "zone-list":
+        cmd_zone_list(store)
+    elif args.command == "zone-show":
+        cmd_zone_show(store, args.zone_id)
+    elif args.command == "reading-add":
+        cmd_reading_add(store, args.zone_id, args.temp_celsius, args.sensor_root)
+    elif args.command == "band-add":
+        cmd_band_add(store, args.zone_id, args.low_celsius, args.high_celsius)
+    elif args.command == "schedule-add":
+        setpoint_d = celsius_to_decicelsius(args.setpoint)
+        cmd_schedule_add(store, args.zone_id, args.start_block, args.end_block, setpoint_d)
+    elif args.command == "link":
+        cmd_link(store, args.zone_a, args.zone_b)
+    elif args.command == "save":
+        path = Path(args.path) if args.path else load_path
+        store.save_to_dir(path)
+        print(f"Saved to {path}")
+    elif args.command == "load":
+        path = Path(args.path) if args.path else load_path
+        store.load_from_dir(path)
+        print(f"Loaded from {path}")
+    elif args.command == "effective-setpoint":
+        sp = simulate_effective_setpoint(store, args.zone_id, args.block_num)
+        print(f"Effective setpoint: {sp} (0.1°C) = {decicelsius_to_celsius(sp):.1f}°C")
+    else:
+        parser.print_help()
+    if args.command in ("zone-add", "reading-add", "band-add", "schedule-add", "link"):
+        store.save_to_dir(load_path)
+    sys.exit(0)

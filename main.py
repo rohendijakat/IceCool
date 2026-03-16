@@ -874,3 +874,76 @@ def batch_add_readings(
     return len(temps_celsius)
 
 
+def batch_add_zones(
+    store: IceCoolStore,
+    zone_ids: List[str],
+    setpoints_decicelsius: List[int],
+    cooling_preferred: List[bool],
+    labels: Optional[List[str]] = None,
+) -> int:
+    if len(zone_ids) > ICECOOL_MAX_BATCH_ZONES:
+        raise IceCoolConfigError(f"Batch size {len(zone_ids)} > {ICECOOL_MAX_BATCH_ZONES}")
+    if len(zone_ids) != len(setpoints_decicelsius) or len(zone_ids) != len(cooling_preferred):
+        raise IceCoolConfigError("Length mismatch")
+    labels = labels or [""] * len(zone_ids)
+    for i, zid in enumerate(zone_ids):
+        validate_setpoint(setpoints_decicelsius[i])
+        h = compute_zone_hash(zid, setpoints_decicelsius[i], cooling_preferred[i])
+        z = ZoneRecord(
+            zone_id=zid,
+            zone_hash=h,
+            setpoint_decicelsius=setpoints_decicelsius[i],
+            created_at=time.time(),
+            cooling_preferred=cooling_preferred[i],
+            label=(labels[i] or "")[:ICECOOL_MAX_LABEL_LENGTH],
+        )
+        store.add_zone(z)
+    return len(zone_ids)
+
+
+# -----------------------------------------------------------------------------
+# EXPORT / IMPORT
+# -----------------------------------------------------------------------------
+
+
+def export_zones_csv(store: IceCoolStore, path: Path) -> None:
+    lines = ["zone_id,setpoint_decicelsius,setpoint_celsius,cooling_preferred,label"]
+    for zid in store.list_zone_ids():
+        z = store.get_zone(zid)
+        lines.append(f"{z.zone_id},{z.setpoint_decicelsius},{z.setpoint_celsius():.2f},{z.cooling_preferred},{z.label or ''}")
+    path.write_text("\n".join(lines))
+
+
+def import_zones_csv(store: IceCoolStore, path: Path) -> int:
+    text = path.read_text()
+    count = 0
+    for line in text.strip().split("\n")[1:]:
+        parts = line.split(",")
+        if len(parts) < 4:
+            continue
+        zid = parts[0].strip()
+        setpoint_d = int(parts[1].strip())
+        cooling = parts[3].strip().lower() in ("true", "1", "yes")
+        label = parts[4].strip() if len(parts) > 4 else ""
+        try:
+            cmd_zone_add(store, zid, setpoint_d, cooling, label)
+            count += 1
+        except Exception:
+            pass
+    return count
+
+
+# -----------------------------------------------------------------------------
+# LOGGING HELPERS
+# -----------------------------------------------------------------------------
+
+
+def log_debug(msg: str) -> None:
+    if os.environ.get("ICECOOL_LOG_LEVEL", "INFO") == "DEBUG":
+        print(f"[DEBUG] {msg}")
+
+
+def log_info(msg: str) -> None:
+    print(f"[INFO] {msg}")
+
+

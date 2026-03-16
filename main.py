@@ -728,3 +728,76 @@ def main() -> int:
         setpoint_d = celsius_to_decicelsius(args.setpoint)
         cmd_schedule_add(store, args.zone_id, args.start_block, args.end_block, setpoint_d)
     elif args.command == "link":
+        cmd_link(store, args.zone_a, args.zone_b)
+    elif args.command == "save":
+        path = Path(args.path) if args.path else load_path
+        store.save_to_dir(path)
+        print(f"Saved to {path}")
+    elif args.command == "load":
+        path = Path(args.path) if args.path else load_path
+        store.load_from_dir(path)
+        print(f"Loaded from {path}")
+    elif args.command == "effective-setpoint":
+        sp = simulate_effective_setpoint(store, args.zone_id, args.block_num)
+        print(f"Effective setpoint: {sp} (0.1°C) = {decicelsius_to_celsius(sp):.1f}°C")
+    else:
+        parser.print_help()
+        return 0
+
+    if args.command in ("zone-add", "reading-add", "band-add", "schedule-add", "link"):
+        store.save_to_dir(load_path)
+    return 0
+
+
+# -----------------------------------------------------------------------------
+# WEB3 / CONTRACT INTERACTION (STUB)
+# -----------------------------------------------------------------------------
+
+
+def get_web3_provider(rpc_url: str):
+    try:
+        from web3 import Web3
+        return Web3(Web3.HTTPProvider(rpc_url))
+    except ImportError:
+        return None
+
+
+def contract_call_register_zone(
+    w3: Any,
+    contract_address: str,
+    zone_id_hex: str,
+    setpoint_decicelsius: int,
+    zone_hash_hex: str,
+    cooling_preferred: bool,
+    value_wei: int,
+    private_key: Optional[str] = None,
+) -> Optional[str]:
+    if not w3 or not contract_address:
+        return None
+    try:
+        from web3 import Web3
+        acct = w3.eth.account.from_key(private_key) if private_key else None
+        # ABI fragment for registerZone(bytes32,uint16,bytes32,bool)
+        # In production use full ABI and contract.functions.registerZone(...)
+        return "0x" + os.urandom(32).hex()
+    except Exception:
+        return None
+
+
+def contract_call_record_reading(
+    w3: Any,
+    contract_address: str,
+    zone_id_hex: str,
+    reading_index: int,
+    temp_scaled: int,
+    sensor_root_hex: str,
+    private_key: Optional[str] = None,
+) -> Optional[str]:
+    if not w3 or not contract_address:
+        return None
+    return "0x" + os.urandom(32).hex()
+
+
+def fetch_zone_from_chain(w3: Any, contract_address: str, zone_id_hex: str) -> Optional[Dict[str, Any]]:
+    if not w3 or not contract_address:
+        return None

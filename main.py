@@ -1020,3 +1020,76 @@ def validate_thermostat_mode(mode: int) -> None:
 
 
 def cmd_config_show() -> None:
+    cfg = load_config()
+    print(f"rpc_url: {cfg.rpc_url}")
+    print(f"contract_address: {cfg.contract_address or '(not set)'}")
+    print(f"chain_id: {cfg.chain_id}")
+    print(f"anchor_fee_wei: {cfg.anchor_fee_wei}")
+    print(f"default_setpoint_decicelsius: {cfg.default_setpoint_decicelsius}")
+
+
+def cmd_config_set(rpc_url: Optional[str] = None, contract_address: Optional[str] = None, chain_id: Optional[int] = None) -> None:
+    cfg = load_config()
+    if rpc_url is not None:
+        cfg.rpc_url = rpc_url
+    if contract_address is not None:
+        cfg.contract_address = contract_address
+    if chain_id is not None:
+        cfg.chain_id = chain_id
+    save_config(cfg)
+    print("Config updated")
+
+
+# -----------------------------------------------------------------------------
+# EXTRA CONVERSION HELPERS
+# -----------------------------------------------------------------------------
+
+
+def kelvin_to_decicelsius(kelvin: float) -> int:
+    return int(round((kelvin - 273.15) * 10))
+
+
+def decicelsius_to_kelvin(decicelsius: Union[int, float]) -> float:
+    return decicelsius / 10.0 + 273.15
+
+
+def rankine_to_decicelsius(rankine: float) -> int:
+    return fahrenheit_to_decicelsius((rankine - 459.67) * 9 / 5 + 32)
+
+
+# -----------------------------------------------------------------------------
+# EFFECTIVE SETPOINT WITH NIGHT SETBACK (LOCAL)
+# -----------------------------------------------------------------------------
+
+
+def effective_setpoint_with_setback(
+    base_setpoint_decicelsius: int,
+    night_setback_decicelsius: int,
+    day_setforward_decicelsius: int,
+    use_night_setback: bool,
+) -> int:
+    if use_night_setback and night_setback_decicelsius > 0:
+        return min(base_setpoint_decicelsius, night_setback_decicelsius)
+    if not use_night_setback and day_setforward_decicelsius > 0:
+        return max(base_setpoint_decicelsius, day_setforward_decicelsius)
+    return base_setpoint_decicelsius
+
+
+# -----------------------------------------------------------------------------
+# COMFORT INDEX (SIMPLIFIED)
+# -----------------------------------------------------------------------------
+
+
+def comfort_index(temp_celsius: float, humidity_percent: int) -> float:
+    """Simple 0-1 comfort index; higher is more comfortable."""
+    if humidity_percent <= 0:
+        return 0.5
+    dew = dewpoint_approx(temp_celsius * 10, humidity_percent)
+    diff = abs(temp_celsius - 22.0)
+    hum_penalty = (humidity_percent - 50) / 100.0 if humidity_percent > 50 else 0
+    return max(0, 1.0 - diff / 10.0 - hum_penalty * 0.2)
+
+
+# -----------------------------------------------------------------------------
+# SCHEDULE HELPERS (BLOCK -> SETPOINT)
+# -----------------------------------------------------------------------------

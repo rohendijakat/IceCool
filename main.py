@@ -801,3 +801,76 @@ def contract_call_record_reading(
 def fetch_zone_from_chain(w3: Any, contract_address: str, zone_id_hex: str) -> Optional[Dict[str, Any]]:
     if not w3 or not contract_address:
         return None
+    return None
+
+
+# -----------------------------------------------------------------------------
+# HTTP API SERVER (OPTIONAL)
+# -----------------------------------------------------------------------------
+
+
+def run_api_server(store: IceCoolStore, host: str = "127.0.0.1", port: int = 8765) -> None:
+    try:
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+    except ImportError:
+        print("HTTP server not available")
+        return
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            if self.path == "/zones":
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                zones = [{"zone_id": zid, "setpoint_decicelsius": store.get_zone(zid).setpoint_decicelsius} for zid in store.list_zone_ids()]
+                self.wfile.write(json.dumps(zones).encode())
+            elif self.path.startswith("/zone/"):
+                zid = self.path.split("/")[-1]
+                try:
+                    z = store.get_zone(zid)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        "zone_id": z.zone_id,
+                        "setpoint_decicelsius": z.setpoint_decicelsius,
+                        "cooling_preferred": z.cooling_preferred,
+                        "label": z.label,
+                    }).encode())
+                except IceCoolZoneNotFoundError:
+                    self.send_response(404)
+                    self.end_headers()
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def log_message(self, format: str, *args: Any) -> None:
+            pass
+
+    server = HTTPServer((host, port), Handler)
+    print(f"Serving at http://{host}:{port}")
+    server.serve_forever()
+
+
+# -----------------------------------------------------------------------------
+# BATCH HELPERS
+# -----------------------------------------------------------------------------
+
+
+def batch_add_readings(
+    store: IceCoolStore,
+    zone_id: str,
+    temps_celsius: List[float],
+    sensor_roots: Optional[List[str]] = None,
+) -> int:
+    store.get_zone(zone_id)
+    if len(temps_celsius) > ICECOOL_MAX_BATCH_READINGS:
+        raise IceCoolConfigError(f"Batch size {len(temps_celsius)} > {ICECOOL_MAX_BATCH_READINGS}")
+    start = store.reading_count(zone_id)
+    for i, t in enumerate(temps_celsius):
+        sr = (sensor_roots[i] if sensor_roots and i < len(sensor_roots) else "") or hashlib.sha256(f"{zone_id}{start+i}{time.time()}".encode()).hexdigest()
+        r = SetpointReadingRecord(zone_id=zone_id, reading_index=start + i, temp_scaled=celsius_to_scaled(t), sensor_root=sr, recorded_at=time.time())
+        store.add_reading(r)
+    return len(temps_celsius)
+
+

@@ -947,3 +947,76 @@ def log_info(msg: str) -> None:
     print(f"[INFO] {msg}")
 
 
+def log_warning(msg: str) -> None:
+    print(f"[WARN] {msg}", file=sys.stderr)
+
+
+def log_error(msg: str) -> None:
+    print(f"[ERROR] {msg}", file=sys.stderr)
+
+
+# -----------------------------------------------------------------------------
+# THERMOSTAT MODE NAMES
+# -----------------------------------------------------------------------------
+
+
+def thermostat_mode_name(mode: int) -> str:
+    if mode == ICECOOL_THERMOSTAT_MODE_OFF:
+        return "OFF"
+    if mode == ICECOOL_THERMOSTAT_MODE_COOL:
+        return "COOL"
+    if mode == ICECOOL_THERMOSTAT_MODE_HEAT:
+        return "HEAT"
+    if mode == ICECOOL_THERMOSTAT_MODE_AUTO:
+        return "AUTO"
+    return "UNKNOWN"
+
+
+def is_cooling_mode(mode: int) -> bool:
+    return mode in (ICECOOL_THERMOSTAT_MODE_COOL, ICECOOL_THERMOSTAT_MODE_AUTO)
+
+
+def is_heating_mode(mode: int) -> bool:
+    return mode in (ICECOOL_THERMOSTAT_MODE_HEAT, ICECOOL_THERMOSTAT_MODE_AUTO)
+
+
+# -----------------------------------------------------------------------------
+# RANDOM ZONE ID GENERATOR (FOR TESTING/DEMO)
+# -----------------------------------------------------------------------------
+
+
+def generate_zone_id(prefix: str = "zone") -> str:
+    raw = hashlib.sha256(f"{prefix}{time.time()}{random.randint(0, 2**32)}".encode()).hexdigest()
+    return f"{prefix}_{raw[:16]}"
+
+
+def generate_sensor_root() -> str:
+    return hashlib.sha256(os.urandom(32)).hexdigest()
+
+
+# -----------------------------------------------------------------------------
+# VALIDATION HELPERS (EXTENDED)
+# -----------------------------------------------------------------------------
+
+
+def validate_humidity(percent: int) -> None:
+    if not (0 <= percent <= ICECOOL_MAX_HUMIDITY_PERCENT):
+        raise IceCoolConfigError(f"Humidity {percent} out of range [0, {ICECOOL_MAX_HUMIDITY_PERCENT}]")
+
+
+def validate_fan_preset_index(index: int) -> None:
+    if not (0 <= index < ICECOOL_MAX_FAN_PRESETS):
+        raise IceCoolConfigError(f"Fan preset index {index} out of range [0, {ICECOOL_MAX_FAN_PRESETS})")
+
+
+def validate_thermostat_mode(mode: int) -> None:
+    if not (0 <= mode <= ICECOOL_THERMOSTAT_MODE_AUTO):
+        raise IceCoolConfigError(f"Invalid thermostat mode {mode}")
+
+
+# -----------------------------------------------------------------------------
+# CONFIG CLI
+# -----------------------------------------------------------------------------
+
+
+def cmd_config_show() -> None:

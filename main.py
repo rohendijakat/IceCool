@@ -1385,3 +1385,76 @@ def clamp_int(x: int, lo: int, hi: int) -> int:
     if x < lo:
         return lo
     if x > hi:
+        return hi
+    return x
+
+
+# -----------------------------------------------------------------------------
+# DEFROST DURATION VALIDATION
+# -----------------------------------------------------------------------------
+
+
+def validate_defrost_duration(seconds: int) -> None:
+    if not (0 <= seconds <= ICECOOL_DEFROST_MAX_DURATION):
+        raise IceCoolConfigError(f"Defrost duration {seconds} out of range [0, {ICECOOL_DEFROST_MAX_DURATION}]")
+
+
+# -----------------------------------------------------------------------------
+# CALIBRATION OFFSET VALIDATION
+# -----------------------------------------------------------------------------
+
+
+def validate_calibration_offset(offset_scaled: int) -> None:
+    if abs(offset_scaled) > ICECOOL_CALIBRATION_OFFSET_MAX:
+        raise IceCoolConfigError(f"Calibration offset too large (max {ICECOOL_CALIBRATION_OFFSET_MAX})")
+
+
+# -----------------------------------------------------------------------------
+# STORE STATS
+# -----------------------------------------------------------------------------
+
+
+def store_stats(store: IceCoolStore) -> Dict[str, Any]:
+    zone_ids = store.list_zone_ids()
+    total_readings = sum(store.reading_count(zid) for zid in zone_ids)
+    total_bands = sum(len(store.get_bands(zid)) for zid in zone_ids)
+    total_schedules = sum(len(store.get_schedule_windows(zid)) for zid in zone_ids)
+    return {
+        "zones": len(zone_ids),
+        "total_readings": total_readings,
+        "total_bands": total_bands,
+        "total_schedules": total_schedules,
+        "archived": len([z for z in zone_ids if store.is_archived(z)]),
+    }
+
+
+def store_stats_print(store: IceCoolStore) -> None:
+    s = store_stats(store)
+    print(f"Zones: {s['zones']}  Readings: {s['total_readings']}  Bands: {s['total_bands']}  Schedules: {s['total_schedules']}  Archived: {s['archived']}")
+
+
+def zone_ids_matching_label(store: IceCoolStore, label_substring: str) -> List[str]:
+    out = []
+    for zid in store.list_zone_ids():
+        z = store.get_zone(zid)
+        if label_substring.lower() in (z.label or "").lower():
+            out.append(zid)
+    return out
+
+
+def setpoints_for_zones(store: IceCoolStore, zone_ids: List[str]) -> List[int]:
+    return [store.get_zone(zid).setpoint_decicelsius for zid in zone_ids]
+
+
+def average_setpoint(store: IceCoolStore) -> float:
+    ids = store.list_zone_ids()
+    if not ids:
+        return 0.0
+    vals = [store.get_zone(zid).setpoint_decicelsius for zid in ids]
+    return sum(vals) / len(vals) / 10.0
+
+
+# -----------------------------------------------------------------------------
+# MAIN (WITH CONFIG, EXPORT, IMPORT, API)
+# -----------------------------------------------------------------------------
+

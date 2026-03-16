@@ -1166,3 +1166,76 @@ def check_zone_before_register(z: ZoneRecord) -> List[str]:
         validate_setpoint(z.setpoint_decicelsius)
     except IceCoolSetpointOutOfBoundsError as e:
         errors.append(str(e))
+    try:
+        validate_label(z.label)
+    except IceCoolLabelTooLongError as e:
+        errors.append(str(e))
+    if len(z.zone_id) == 0:
+        errors.append("zone_id is empty")
+    return errors
+
+
+def check_schedule_before_bind(start_block: int, end_block: int, setpoint_decicelsius: int) -> List[str]:
+    errors = []
+    try:
+        validate_schedule_window(start_block, end_block)
+    except IceCoolScheduleWindowError as e:
+        errors.append(str(e))
+    try:
+        validate_setpoint(setpoint_decicelsius)
+    except IceCoolSetpointOutOfBoundsError as e:
+        errors.append(str(e))
+    return errors
+
+
+# -----------------------------------------------------------------------------
+# FORMAT HELPERS (DISPLAY)
+# -----------------------------------------------------------------------------
+
+
+def format_setpoint_decicelsius(d: int) -> str:
+    return f"{d} (0.1°C) = {decicelsius_to_celsius(d):.1f}°C"
+
+
+def format_temp_scaled(scaled: int) -> str:
+    return f"{scaled_to_celsius(scaled):.2f}°C"
+
+
+def format_zone_summary(z: ZoneRecord, n_readings: int, n_bands: int, n_sched: int) -> str:
+    return (
+        f"{z.zone_id}  setpoint={format_setpoint_decicelsius(z.setpoint_decicelsius)}  "
+        f"readings={n_readings}  bands={n_bands}  schedules={n_sched}  label={z.label or '-'}"
+    )
+
+
+# -----------------------------------------------------------------------------
+# DEFAULT ZONES (PRESETS)
+# -----------------------------------------------------------------------------
+
+
+def default_zones_preset() -> List[Tuple[str, int, bool, str]]:
+    return [
+        ("living_room", 220, True, "Living room"),
+        ("bedroom", 210, True, "Bedroom"),
+        ("kitchen", 230, True, "Kitchen"),
+        ("garage", 150, False, "Garage"),
+        ("basement", 180, False, "Basement"),
+    ]
+
+
+def apply_default_zones_preset(store: IceCoolStore) -> int:
+    preset = default_zones_preset()
+    count = 0
+    for zid, setpoint_d, cooling, label in preset:
+        try:
+            cmd_zone_add(store, zid, setpoint_d, cooling, label)
+            count += 1
+        except IceCoolConfigError:
+            pass
+    return count
+
+
+# -----------------------------------------------------------------------------
+# CHAIN HELPERS (HEX ENCODING)
+# -----------------------------------------------------------------------------
+
